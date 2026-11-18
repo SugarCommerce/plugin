@@ -75,6 +75,25 @@ final class NoticesTest extends PluginTestCase {
 		$this->assertSame( '<div class="notice notice-success" data-notice-id="welcome"><p><strong>Welcome</strong> </p></div>', $this->printed() );
 	}
 
+	/**
+	 * The notice is core's: wp_admin_notice() prints it, so another plugin's
+	 * wp_admin_notice_args filter reaches it like any core notice.
+	 */
+	public function test_a_notice_goes_through_core(): void {
+		$this->load( [ 'welcome' => [ 'type' => 'warning', 'message' => 'Hi' ] ] );
+
+		add_filter(
+			'wp_admin_notice_args',
+			static function ( $args ) {
+				$args['additional_classes'] = [ 'inline' ];
+
+				return $args;
+			}
+		);
+
+		$this->assertSame( '<div class="notice notice-warning inline" data-notice-id="welcome"><p>Hi</p></div>', $this->printed() );
+	}
+
 	public function test_a_capability_hides_it(): void {
 		$this->load( [ 'welcome' => [ 'message' => 'Hi', 'capability' => 'manage_shop_settings' ] ] );
 

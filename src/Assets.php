@@ -23,6 +23,11 @@ namespace SugarCommerce\Plugin;
  * `__FILE__` is the whole trick: the package root is the nearest folder above
  * it holding a composer.json, and the files are in that root's `assets/`.
  * A package whose files live elsewhere asks path_to_url() for any path.
+ *
+ * Not core's `plugins_url( $file, __FILE__ )`, which is right for a plugin's
+ * own files: it cannot serve a package bundled into a theme, and its caller
+ * has to know how deep below the package root it sits, which a Strauss copy
+ * changes. Every SugarCommerce package asks this instead of keeping a copy.
  */
 final class Assets {
 

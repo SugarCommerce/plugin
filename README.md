@@ -257,6 +257,11 @@ before `init`. A link may also take `style`. Links opening a new tab get
 ],
 ```
 
+Each notice is printed by core's `wp_admin_notice()`, so it has core's markup
+and escaping and another plugin's `wp_admin_notice_args` / `_markup` filters
+reach it. What core does not do is remember a dismissal -- its close button
+hides a notice until the next page -- and that is what this adds.
+
 Everything remembered is named from the plugin's id, so two plugins that both
 call a notice `welcome` keep separate dismissals:
 
@@ -315,13 +320,18 @@ edit busts caches; a string is used as given, and null adds none. A path
 that climbs out of `assets/` (`../`) is refused. A symlinked plugin is found
 through the same real-path map `plugins_url()` reads.
 
-**This is the one shared way.** Several packages in this family still work
-out their own asset URLs with a copy of the same arithmetic --
-`sugarcommerce/conditions` (`Admin\Assets`), `emails` (`Utils\Assets`),
-`fields` (`Assets`), `jobs` (`Sync::assets_url()`), `geo` (`Flags`),
-`network` (`Referrer\Icons`), `security` (`Turnstile\Widget`) and `storage`
-(`Utils\Assets`). Each can require `sugarcommerce/plugin` and call
-`Assets::url()` or `Assets::path_to_url()` instead.
+**This is the one shared way.** Every SugarCommerce package that ships CSS,
+JavaScript, images or flags requires `sugarcommerce/plugin` and asks
+`Assets` -- columns, conditions, emails, fields, geo, importers, jobs,
+network, onboarding, reports, security, status-badge, storage and tables --
+rather than keeping its own copy of this arithmetic.
+
+Why not core's `plugins_url( 'assets/x.js', __FILE__ )`? It is right for a
+plugin's own files and copes with `vendor/` and symlinks. It cannot serve a
+package bundled into a theme, and each caller has to know how many folders
+below its package root it sits, which a Strauss copy changes. `Assets`
+finds the root by its `composer.json` and maps the path the way
+`plugins_url()` does, so it is right in all of those places.
 
 ## Moving from arraypress/wp-*
 

@@ -220,29 +220,30 @@ final class Notices {
 			$message = $message();
 		}
 
-		$type    = sanitize_html_class( (string) ( $notice['type'] ?? 'info' ) );
-		$classes = 'notice notice-' . $type;
-		$extra   = '';
+		$dismissible = ! empty( $notice['dismissible'] );
+		$attributes  = [ 'data-notice-id' => $notice_id ];
 
-		if ( ! empty( $notice['dismissible'] ) ) {
-			$classes .= ' is-dismissible';
-			$extra    = sprintf(
-				' data-sugarcommerce-dismiss="%s" data-nonce="%s"',
-				esc_attr( $this->action() ),
-				esc_attr( wp_create_nonce( $this->action() ) )
-			);
+		if ( $dismissible ) {
+			$attributes['data-sugarcommerce-dismiss'] = $this->action();
+			$attributes['data-nonce']                 = wp_create_nonce( $this->action() );
 		}
 
 		if ( ! empty( $notice['show_once'] ) ) {
 			update_option( $this->shown_key( $notice_id ), true, false );
 		}
 
-		printf(
-			'<div class="%s" data-notice-id="%s"%s><p>%s</p></div>',
-			esc_attr( $classes ),
-			esc_attr( $notice_id ),
-			$extra, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
-			wp_kses_post( (string) $message )
+		// Core's markup, escaping and wp_kses_post(), plus its
+		// wp_admin_notice_args / _markup filters. Dismissal is the part core
+		// does not do -- its close button only hides the notice until the
+		// next page -- so the data attributes carry what script() needs to
+		// remember it.
+		wp_admin_notice(
+			(string) $message,
+			[
+				'type'        => sanitize_html_class( (string) ( $notice['type'] ?? 'info' ) ),
+				'dismissible' => $dismissible,
+				'attributes'  => $attributes,
+			]
 		);
 	}
 
