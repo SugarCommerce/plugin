@@ -153,6 +153,35 @@ final class PluginTest extends PluginTestCase {
 		$this->assertSame( [ 'early', 'one' ], $GLOBALS['pl']['order'] );
 	}
 
+	/**
+	 * A folder entry loads its own files in name order, not its subfolders.
+	 */
+	public function test_an_includes_folder_is_loaded_file_by_file(): void {
+		$GLOBALS['pl']['order'] = [];
+
+		$file = $this->plugin_file(
+			'includes-folder',
+			[
+				'early/b.php'         => '<?php $GLOBALS["pl"]["order"][] = "early-b";',
+				'early/a.php'         => '<?php $GLOBALS["pl"]["order"][] = "early-a";',
+				'inc/utils/zz.php'    => '<?php $GLOBALS["pl"]["order"][] = "zz";',
+				'inc/utils/aa.php'    => '<?php $GLOBALS["pl"]["order"][] = "aa";',
+				'inc/utils/index.php' => '<?php $GLOBALS["pl"]["order"][] = "index";',
+				'inc/utils/sub/x.php' => '<?php $GLOBALS["pl"]["order"][] = "sub";',
+				'inc/last.php'        => '<?php $GLOBALS["pl"]["order"][] = "last";',
+			]
+		);
+
+		Plugin::register( $file, static function () {}, [
+			'early_includes' => [ dirname( $file ) . '/early/' ],
+			'includes'       => [ 'inc/utils/', 'inc/last.php', 'inc/no-such-folder/' ],
+		] );
+
+		pl_fire( 'plugins_loaded' );
+
+		$this->assertSame( [ 'early-a', 'early-b', 'aa', 'zz', 'last' ], $GLOBALS['pl']['order'] );
+	}
+
 	public function test_constants_are_defined_from_a_prefix(): void {
 		$file = $this->plugin_file( 'constants' );
 

@@ -26,6 +26,7 @@ URL of a file inside my own package, wherever Composer or Strauss put it?
 * Switch off, or refuse to run beside, a conflicting plugin
 * Define the usual `MYPLUGIN_PLUGIN_DIR`-style constants and load the text domain
 * Add Settings and Docs links, and welcome notices users can dismiss
+* Load a whole folder of PHP files in name order, the same on every server
 * Enqueue a library's own CSS and JavaScript from `vendor/`, prefixed or symlinked
 
 ## Installation
@@ -173,14 +174,49 @@ for that:
 | Key | Does |
 |-----|------|
 | `priority` | the `plugins_loaded` priority the check runs at (default 10) |
-| `early_includes` | absolute paths, required first |
-| `includes` | paths within the plugin's folder, required next |
+| `early_includes` | absolute paths, required first; a folder is loaded file by file |
+| `includes` | paths within the plugin's folder, required next; a folder is loaded file by file |
 | `constants` | `'MY_PLUGIN'` defines `MY_PLUGIN_PLUGIN_VERSION` (from the header), `_FILE`, `_BASE`, `_DIR`, `_URL` and `_QUERY_LIMIT`; or an array of `prefix`, `version`, `skip` (suffixes, `[ 'URL' ]`) and `definitions` (`[ 'NAME' => value ]`) |
 | `textdomain` | `'my-plugin'` loads `languages/`; or an array of `domain` and `path` (`'/i18n'`), or `domain` and a `callback` given the folder |
 | `setup_hooks` | `[ 'action' => callable ]`, hooked once loaded; a callable that takes an argument is given the plugin file |
 | `activation`, `deactivation` | registered as the plugin's activation and deactivation hooks |
 | `success` | called once everything is set up |
 | `id` | what notices are stored under (default: the folder, `my-plugin` → `my_plugin`) |
+
+A path that is not there is skipped, not fatal.
+
+### Loading a folder
+
+```php
+Plugin::register( __FILE__, $boot, [
+	'includes' => [ 'includes/functions.php', 'includes/utils/', 'includes/admin/' ],
+] );
+```
+
+A folder is loaded file by file, in name order -- its own files, not its
+subfolders (list those too). Dot files and the `index.php` silence stubs are
+skipped. The order is the point: `DirectoryIterator` and
+`glob( …, GLOB_NOSORT )` hand back whatever the filesystem holds -- creation
+order on APFS, hashed elsewhere -- so a class extending another in the same
+folder loads on your machine and fatals on the server. Here the order is the
+names', which you control: prefix to pin it (`10-base.php`,
+`20-extends-base.php`; sorting is by string, so pad the numbers).
+
+`Slurp` does the same anywhere else:
+
+```php
+use SugarCommerce\Plugin\Slurp;
+
+Slurp::dir( __DIR__ . '/includes/utils' );          // the paths it loaded, in order
+Slurp::dir( __DIR__ . '/includes', true );           // and subfolders, each after its folder's own files
+Slurp::dirs( [ $schemas, $tables, $queries ] );      // several, in the order given
+Slurp::files( __DIR__ . '/includes/utils' );         // what it would load, without loading it
+```
+
+Files are `require_once`d, so anything at file scope runs the moment they
+load. Declare classes and functions in them and hook from a bootstrap that
+runs afterwards. `scandir()` is used, not `glob()`, so a path with a bracket
+in it (`Sites [old]`) is read literally rather than as a pattern.
 
 ## Links on the plugins screen
 
@@ -285,8 +321,9 @@ out their own asset URLs with a copy of the same arithmetic --
 
 ## Moving from arraypress/wp-*
 
-From `arraypress/wp-register-plugin` (`ArrayPress\RegisterPlugin`) and
-`arraypress/wp-composer-assets` (`ArrayPress\ComposerAssets`). The global
+From `arraypress/wp-register-plugin` (`ArrayPress\RegisterPlugin`),
+`arraypress/wp-composer-assets` (`ArrayPress\ComposerAssets`) and
+`arraypress/wp-slurp` (`ArrayPress\Slurp`). The global
 functions are gone -- a library bundled into several plugins must not
 declare any -- and each is a static method. Every configuration key keeps its
 name and meaning.
@@ -321,6 +358,8 @@ name and meaning.
 | `AssetLoader::locate_assets()` | `Assets::locate()` |
 | `AssetLoader::clear_cache()` | `Assets::clear_cache()` |
 | — | `Assets::url()`, `Assets::path()`, `Assets::path_to_url()` |
+| `ArrayPress\Slurp\Slurp::dir()`, `dirs()`, `files()`, `SKIP` | `SugarCommerce\Plugin\Slurp::` the same (same answers) |
+| an `includes` / `early_includes` entry that was a folder: a fatal `require_once` | the folder's files, in name order |
 
 Fixed on the way: registering a file twice set it up twice; a second
 requirements check lost an `exists` callable; a requirement named like a PHP

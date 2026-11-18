@@ -475,6 +475,24 @@ final class Plugin {
 	}
 
 	/**
+	 * Require one `includes` entry: a file, or every PHP file in a folder.
+	 *
+	 * A folder is loaded file by file in name order (Slurp), not its
+	 * subfolders. A path that is not there is skipped.
+	 *
+	 * @param string $path Absolute path.
+	 *
+	 * @return void
+	 */
+	private static function require_path( string $path ): void {
+		if ( is_dir( $path ) ) {
+			Slurp::dir( $path );
+		} elseif ( is_file( $path ) ) {
+			require_once $path;
+		}
+	}
+
+	/**
 	 * Load the plugin: files, constants, bootstrap, hooks, links, notices.
 	 *
 	 * @return void
@@ -483,20 +501,14 @@ final class Plugin {
 		$this->loaded = true;
 
 		foreach ( (array) $this->config['early_includes'] as $file ) {
-			if ( is_string( $file ) && file_exists( $file ) ) {
-				require_once $file;
+			if ( is_string( $file ) ) {
+				self::require_path( $file );
 			}
 		}
 
 		foreach ( (array) $this->config['includes'] as $file ) {
-			if ( ! is_string( $file ) ) {
-				continue;
-			}
-
-			$path = $this->dir . ltrim( $file, '/' );
-
-			if ( file_exists( $path ) ) {
-				require_once $path;
+			if ( is_string( $file ) ) {
+				self::require_path( $this->dir . ltrim( $file, '/' ) );
 			}
 		}
 
