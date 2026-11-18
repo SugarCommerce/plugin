@@ -151,7 +151,9 @@ final class Plugin {
 	 * Register an Easy Digital Downloads extension.
 	 *
 	 * Requires EDD 3.6.1, and checks at `plugins_loaded` 99, after EDD's own
-	 * extension loader (98).
+	 * extension loader (98). The WordPress minimum is the plugin header's
+	 * `Requires at least`, so the header stays the one source; 7.1 when the
+	 * header names none.
 	 *
 	 * @param string               $file      The plugin's main file.
 	 * @param callable             $bootstrap What starts the plugin.
@@ -167,7 +169,7 @@ final class Plugin {
 				[
 					'requirements' => [
 						'php'                    => '8.3',
-						'wp'                     => '7.1',
+						'wp'                     => self::header_requires_wp( $file, '7.1' ),
 						'easy-digital-downloads' => '3.6.1',
 					],
 					'priority'     => 99,
@@ -604,6 +606,30 @@ final class Plugin {
 				define( (string) $name, $value );
 			}
 		}
+	}
+
+	/**
+	 * The `Requires at least` from a plugin's header.
+	 *
+	 * Read untranslated and without markup, like the Version below.
+	 *
+	 * @param string $file     The plugin's main file.
+	 * @param string $fallback When the header names no minimum.
+	 *
+	 * @return string
+	 */
+	private static function header_requires_wp( string $file, string $fallback ): string {
+		if ( ! is_readable( $file ) ) {
+			return $fallback;
+		}
+
+		if ( ! function_exists( 'get_plugin_data' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$requires = trim( (string) ( get_plugin_data( $file, false, false )['RequiresWP'] ?? '' ) );
+
+		return '' !== $requires ? $requires : $fallback;
 	}
 
 	/**

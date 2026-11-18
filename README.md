@@ -90,6 +90,9 @@ A known dependency needs only its minimum:
 ],
 ```
 
+WordPress is compared the way core's `is_wp_version_compatible()` compares it,
+without a pre-release suffix, so 7.1-RC1 meets `'wp' => '7.1'`.
+
 Anything else says how to find it:
 
 ```php
@@ -271,7 +274,8 @@ Plugin::woocommerce( __FILE__, $boot, $config );  // WooCommerce 10.3.5; plugins
 Plugin::network( __FILE__, $boot, $config );      // links and notices in the network admin too
 ```
 
-Each preset asks for PHP 8.3 and WordPress 7.1, and the caller's
+Each preset asks for PHP 8.3 and WordPress 7.1, except that `edd()` takes
+WordPress from the plugin header's `Requires at least` when it has one. The caller's
 configuration is merged over it key by key (`Plugin::merge_config()`), so
 `'requirements' => [ 'wp' => '6.7.1' ]` changes WordPress and keeps the rest.
 

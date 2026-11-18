@@ -47,6 +47,28 @@ final class RequirementsTest extends TestCase {
 		$this->assertTrue( ( new Requirements( [ 'wp' => '6.8' ] ) )->met() );
 	}
 
+	public function test_a_wordpress_release_candidate_meets_its_release(): void {
+		$GLOBALS['pl']['wp_version'] = '7.1-RC1';
+
+		$this->assertTrue( ( new Requirements( [ 'wp' => '7.1' ] ) )->met(), '7.1-RC1 is 7.1, as is_wp_version_compatible() reads it.' );
+		$this->assertTrue( ( new Requirements( [ 'wp' => '7.0' ] ) )->met() );
+		$this->assertFalse( ( new Requirements( [ 'wp' => '7.2' ] ) )->met() );
+
+		$GLOBALS['pl']['wp_version'] = '7.1.4-src';
+
+		$this->assertTrue( ( new Requirements( [ 'wp' => '7.1.4' ] ) )->met() );
+		$this->assertFalse( ( new Requirements( [ 'wp' => '7.1.5' ] ) )->met() );
+	}
+
+	public function test_only_wordpress_drops_a_pre_release_suffix(): void {
+		$requirement = [
+			'current' => static fn() => '3.6.1-beta1',
+			'minimum' => '3.6.1',
+		];
+
+		$this->assertFalse( ( new Requirements( [ 'dep' => $requirement ] ) )->met() );
+	}
+
 	public function test_a_constant_dependency_is_version_checked(): void {
 		define( 'PL_TEST_DEP_VERSION', '3.2.1' );
 

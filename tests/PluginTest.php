@@ -332,6 +332,24 @@ final class PluginTest extends PluginTestCase {
 
 	// -- Presets -----------------------------------------------------------
 
+	public function test_the_edd_preset_takes_wordpress_from_the_header(): void {
+		$GLOBALS['pl']['header'] = [
+			'Version'    => '1.0.0',
+			'RequiresWP' => '7.0',
+		];
+
+		$requirements = Plugin::edd( $this->plugin_file( 'edd-header' ), static function () {} )->config()['requirements'];
+
+		$this->assertSame( '7.0', $requirements['wp'], 'The plugin header is the one source of the WordPress minimum.' );
+		$this->assertSame( '8.3', $requirements['php'] );
+	}
+
+	public function test_the_edd_preset_falls_back_without_a_header_minimum(): void {
+		$requirements = Plugin::edd( $this->plugin_file( 'edd-no-header' ), static function () {} )->config()['requirements'];
+
+		$this->assertSame( '7.1', $requirements['wp'] );
+	}
+
 	public function test_the_edd_preset(): void {
 		$plugin = Plugin::edd( $this->plugin_file( 'edd-thing' ), static function () {}, [ 'requirements' => [ 'wp' => '6.7.1' ] ] );
 		$config = $plugin->config();

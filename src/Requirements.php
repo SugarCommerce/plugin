@@ -317,12 +317,21 @@ final class Requirements {
 		$this->conflict_results    = [];
 
 		foreach ( $this->requirements as $id => $requirement ) {
-			$found = $this->find( $requirement );
+			$found   = $this->find( $requirement );
+			$compare = $found['version'];
+
+			// WordPress is compared the way core's is_wp_version_compatible()
+			// compares it: without the -alpha, -beta, -RC1 or -src suffix. Left
+			// on, 7.1-RC1 is below 7.1, and a site testing the release
+			// candidate is told it is too old for it.
+			if ( 'wp' === $id && is_string( $compare ) ) {
+				$compare = explode( '-', $compare, 2 )[0];
+			}
 
 			$this->requirement_results[ $id ] = [
 				'exists'  => $found['exists'],
 				'current' => $found['version'],
-				'met'     => $found['exists'] && self::minimum_met( $found['version'], (string) self::value( $requirement['minimum'] ) ),
+				'met'     => $found['exists'] && self::minimum_met( $compare, (string) self::value( $requirement['minimum'] ) ),
 			];
 		}
 
