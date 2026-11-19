@@ -28,6 +28,7 @@ URL of a file inside my own package, wherever Composer or Strauss put it?
 * Add Settings and Docs links, and welcome notices users can dismiss
 * Load a whole folder of PHP files in name order, the same on every server
 * Enqueue a library's own CSS and JavaScript from `vendor/`, prefixed or symlinked
+* Name a bundled copy of a package for the plugin that bundled it
 
 ## Installation
 
@@ -332,6 +333,40 @@ package bundled into a theme, and each caller has to know how many folders
 below its package root it sits, which a Strauss copy changes. `Assets`
 finds the root by its `composer.json` and maps the path the way
 `plugins_url()` does, so it is right in all of those places.
+
+## Naming a bundled copy
+
+Strauss renames namespaces and leaves strings alone. A package that registers
+a REST route, a script handle, a hook or a transient under a literal name
+would register the same one from every plugin that bundles it -- and the
+second plugin gets the first one's routes and scripts. So those packages name
+everything from the namespace they were compiled under, and `Build` reads the
+build's name out of it:
+
+```php
+use SugarCommerce\Plugin\Build;
+
+// From a class in SugarCommerce\Columns\Utils: three segments of its own.
+$build = Build::name( __NAMESPACE__, 3 );
+```
+
+| Compiled under | `Build::name()` |
+|----------------|-----------------|
+| `SugarCommerce\Columns\Utils` (unprefixed) | `''` -- use the package's own name |
+| `SugarCart\Vendor\SugarCommerce\Columns\Utils` | `sugarcart` |
+| `SugarCommerce\Playground\Vendor\SugarCommerce\Columns\Utils` | `sugarcommerce-playground-vendor` |
+| `ArrayPress\EDD\FraudFilter\Lib\Columns\Utils` | `arraypress-edd-fraudfilter` |
+| `Playground\Lib\Columns\Utils` | `playground` |
+
+A prefix in front of `SugarCommerce` is named for its first segment, or all
+of it when it starts `SugarCommerce` too. A plugin that drops the vendor
+segment into its own `…\Lib` namespace is named for every segment before
+`Lib` -- the first alone would be the vendor, and two of its plugins would
+share one name. The second argument is counted rather than written out,
+because Strauss would prefix a namespace it found in a string.
+
+Columns, emails, fields, flyouts, geo, importers, jobs, onboarding, reports,
+storage and tables all ask `Build`.
 
 ## Moving from arraypress/wp-*
 
