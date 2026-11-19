@@ -321,6 +321,27 @@ edit busts caches; a string is used as given, and null adds none. A path
 that climbs out of `assets/` (`../`) is refused. A symlinked plugin is found
 through the same real-path map `plugins_url()` reads.
 
+### Built scripts
+
+A package whose scripts are ES modules built by `@wordpress/scripts` commits
+the build to `assets/build/` -- `{entry}.js` with an `{entry}.asset.php`
+beside it -- because Composer and Strauss copy a package as it is, with no
+install step. The manifest names the WordPress scripts the entry imports and
+a version that changes with its contents, so PHP never lists them again:
+
+```php
+Assets::enqueue_built_script( 'my-lib-admin', __FILE__, 'admin', [ 'my-lib-config' ] );
+```
+
+| Method | Gives |
+|--------|-------|
+| `enqueue_built_script( $handle, __FILE__, $entry, $deps, $args )` | register and enqueue `build/{entry}.js` with the manifest's dependencies (plus `$deps`, handles it needs without importing) and version; false when the entry was never built |
+| `register_built_script()` | the same, register only |
+| `built_manifest( __FILE__, $entry )` | `dependencies` and `version` from `{entry}.asset.php`, or null |
+
+An entry that imports `@wordpress/i18n` has its strings translated under the
+`sugarcommerce` text domain (`wp_set_script_translations()`).
+
 **This is the one shared way.** Every SugarCommerce package that ships CSS,
 JavaScript, images or flags requires `sugarcommerce/plugin` and asks
 `Assets` -- columns, conditions, emails, fields, geo, importers, jobs,

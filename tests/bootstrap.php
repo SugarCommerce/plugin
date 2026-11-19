@@ -73,6 +73,7 @@ function pl_reset(): void {
 		'scripts'     => [],
 		'styles'      => [],
 		'enqueued'    => [],
+		'i18n'        => [],
 		'nonce_ok'    => true,
 		'header'      => [ 'Version' => '2.4.0' ],
 		'auto_update' => true,
@@ -335,6 +336,12 @@ function wp_register_style( $handle, $src, $deps = [], $ver = false, $media = 'a
 
 function wp_enqueue_script( $handle ) {
 	$GLOBALS['pl']['enqueued'][] = 'script:' . $handle;
+}
+
+function wp_set_script_translations( $handle, $domain = 'default', $path = '' ) {
+	$GLOBALS['pl']['i18n'][ $handle ] = $domain;
+
+	return true;
 }
 
 function wp_enqueue_style( $handle ) {

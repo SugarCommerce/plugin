@@ -118,6 +118,107 @@ final class Assets {
 	}
 
 	/**
+	 * What @wordpress/scripts says a built entry needs.
+	 *
+	 * Each entry is `assets/build/{entry}.js` with an `{entry}.asset.php`
+	 * beside it naming the WordPress scripts it imports (`wp-api-fetch`,
+	 * `wp-i18n`, …) and a version that changes when its contents do. Reading
+	 * that file, rather than writing the dependencies out again in PHP, is
+	 * what keeps the two from drifting: an import added to a module is a
+	 * dependency on the next build.
+	 *
+	 * @param string $calling_file __FILE__ of any file in the package.
+	 * @param string $entry        The entry's name, as the build was given it.
+	 *
+	 * @return array{dependencies: string[], version: string|bool}|null Null when the entry was never built.
+	 */
+	public static function built_manifest( string $calling_file, string $entry ): ?array {
+		$path = self::path( $calling_file, 'build/' . sanitize_key( $entry ) . '.asset.php' );
+
+		if ( null === $path ) {
+			return null;
+		}
+
+		$asset = require $path;
+
+		if ( ! is_array( $asset ) ) {
+			return null;
+		}
+
+		return [
+			'dependencies' => array_values( array_map( 'strval', (array) ( $asset['dependencies'] ?? [] ) ) ),
+			'version'      => isset( $asset['version'] ) ? (string) $asset['version'] : false,
+		];
+	}
+
+	/**
+	 * Register a script @wordpress/scripts built into the package's `assets/build/`.
+	 *
+	 * The dependencies and version come from the entry's `.asset.php`; `$deps`
+	 * adds handles it needs without importing them (a configuration script,
+	 * media-views). An entry that imports `@wordpress/i18n` has its strings
+	 * translated under the `sugarcommerce` text domain.
+	 *
+	 * The build is committed, because Composer and Strauss copy a package as
+	 * it is, with no install step to run one.
+	 *
+	 * @param string                    $handle       The handle.
+	 * @param string                    $calling_file __FILE__ of any file in the package.
+	 * @param string                    $entry        The entry's name.
+	 * @param string[]                  $deps         Handles it needs that it does not import.
+	 * @param array<string, mixed>|bool $args         `in_footer` as a bool, or `in_footer` and `strategy`.
+	 *
+	 * @return bool False when the entry was never built.
+	 */
+	public static function register_built_script( string $handle, string $calling_file, string $entry, array $deps = [], array|bool $args = true ): bool {
+		$manifest = self::built_manifest( $calling_file, $entry );
+
+		if ( null === $manifest ) {
+			return false;
+		}
+
+		$registered = self::register_script(
+			$handle,
+			$calling_file,
+			'build/' . sanitize_key( $entry ) . '.js',
+			array_values( array_unique( array_merge( $manifest['dependencies'], $deps ) ) ),
+			$manifest['version'],
+			$args
+		);
+
+		// Strings written with __() in the scripts are translated from the
+		// plugin's language files, under this text domain.
+		if ( $registered && in_array( 'wp-i18n', $manifest['dependencies'], true ) ) {
+			wp_set_script_translations( $handle, 'sugarcommerce' );
+		}
+
+		return $registered;
+	}
+
+	/**
+	 * Register and enqueue a script @wordpress/scripts built into `assets/build/`.
+	 *
+	 *     Assets::enqueue_built_script( 'my-lib', __FILE__, 'admin', [ 'my-lib-config' ] );
+	 *
+	 * @param string                    $handle       The handle.
+	 * @param string                    $calling_file __FILE__ of any file in the package.
+	 * @param string                    $entry        The entry's name.
+	 * @param string[]                  $deps         Handles it needs that it does not import.
+	 * @param array<string, mixed>|bool $args         `in_footer` as a bool, or `in_footer` and `strategy`.
+	 *
+	 * @return bool False when the entry was never built.
+	 */
+	public static function enqueue_built_script( string $handle, string $calling_file, string $entry, array $deps = [], array|bool $args = true ): bool {
+		if ( ! self::register_built_script( $handle, $calling_file, $entry, $deps, $args ) ) {
+			return false;
+		}
+
+		wp_enqueue_script( $handle );
+
+		return true;
+	}
+
+	/**
 	 * Register a stylesheet from the calling package's assets, to enqueue later.
 	 *
 	 * @param string           $handle       The handle.

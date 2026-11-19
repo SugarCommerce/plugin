@@ -33,7 +33,7 @@ final class AssetsTest extends TestCase {
 	public static function setUpBeforeClass(): void {
 		self::$root = WP_CONTENT_DIR . '/plugins/host-plugin';
 
-		foreach ( [ '/assets/css', '/vendor/acme/with-assets/assets/js', '/vendor/acme/with-assets/src/Deep', '/vendor/acme/no-assets/src', '/vendor/acme/not-a-package/src' ] as $dir ) {
+		foreach ( [ '/assets/css', '/vendor/acme/with-assets/assets/js', '/vendor/acme/with-assets/assets/build', '/vendor/acme/with-assets/src/Deep', '/vendor/acme/no-assets/src', '/vendor/acme/not-a-package/src' ] as $dir ) {
 			if ( ! is_dir( self::$root . $dir ) ) {
 				mkdir( self::$root . $dir, 0777, true );
 			}
@@ -45,6 +45,12 @@ final class AssetsTest extends TestCase {
 			'/vendor/acme/with-assets/composer.json'        => '{"name":"acme/with-assets"}',
 			'/vendor/acme/with-assets/assets/js/thing.js'   => '// x',
 			'/vendor/acme/with-assets/assets/icon.svg'      => '<svg/>',
+			'/vendor/acme/with-assets/assets/build/admin.js' => '(()=>{})();',
+			'/vendor/acme/with-assets/assets/build/admin.asset.php' => "<?php return array('dependencies' => array('wp-api-fetch', 'wp-i18n'), 'version' => 'abc123');",
+			'/vendor/acme/with-assets/assets/build/plain.js' => '(()=>{})();',
+			'/vendor/acme/with-assets/assets/build/plain.asset.php' => "<?php return array('dependencies' => array(), 'version' => 'def456');",
+			'/vendor/acme/with-assets/assets/build/orphan.js' => '(()=>{})();',
+			'/vendor/acme/with-assets/assets/build/gone.asset.php' => "<?php return array('dependencies' => array('wp-i18n'), 'version' => '1');",
 			'/vendor/acme/with-assets/src/Deep/Nested.php'  => '<?php',
 			'/vendor/acme/no-assets/composer.json'          => '{"name":"acme/no-assets"}',
 			'/vendor/acme/no-assets/src/Thing.php'          => '<?php',
@@ -252,5 +258,55 @@ final class AssetsTest extends TestCase {
 		$this->assertSame( 'https://example.test/wp-content/plugins/host-plugin/assets/css/host.css', $GLOBALS['pl']['styles']['host']['src'] );
 		$this->assertSame( 'print', $GLOBALS['pl']['styles']['host']['media'] );
 		$this->assertSame( [ 'style:host' ], $GLOBALS['pl']['enqueued'] );
+	}
+
+	/**
+	 * A built entry takes its dependencies and version from the manifest
+	 * @wordpress/scripts wrote beside it, adds what it needs without
+	 * importing, and is translated when it imports @wordpress/i18n.
+	 */
+	public function test_a_built_entry_is_registered_from_its_manifest(): void {
+		$this->assertSame(
+			[
+				'dependencies' => [ 'wp-api-fetch', 'wp-i18n' ],
+				'version'      => 'abc123',
+			],
+			Assets::built_manifest( self::nested(), 'admin' )
+		);
+
+		$this->assertTrue( Assets::enqueue_built_script( 'lib-admin', self::nested(), 'admin', [ 'lib-config', 'wp-i18n' ] ) );
+
+		$script = $GLOBALS['pl']['scripts']['lib-admin'];
+		$this->assertSame( 'https://example.test/wp-content/plugins/host-plugin/vendor/acme/with-assets/assets/build/admin.js', $script['src'] );
+		$this->assertSame( [ 'wp-api-fetch', 'wp-i18n', 'lib-config' ], $script['deps'] );
+		$this->assertSame( 'abc123', $script['ver'] );
+		$this->assertSame( [ 'in_footer' => true ], $script['args'] );
+		$this->assertSame( [ 'script:lib-admin' ], $GLOBALS['pl']['enqueued'] );
+		$this->assertSame( [ 'lib-admin' => 'sugarcommerce' ], $GLOBALS['pl']['i18n'] );
+	}
+
+	public function test_a_built_entry_without_i18n_is_registered_only(): void {
+		$this->assertTrue( Assets::register_built_script( 'lib-plain', self::nested(), 'plain', [], [ 'strategy' => 'defer' ] ) );
+
+		$this->assertSame( [], $GLOBALS['pl']['scripts']['lib-plain']['deps'] );
+		$this->assertSame( 'def456', $GLOBALS['pl']['scripts']['lib-plain']['ver'] );
+		$this->assertSame( [ 'in_footer' => true, 'strategy' => 'defer' ], $GLOBALS['pl']['scripts']['lib-plain']['args'] );
+		$this->assertSame( [], $GLOBALS['pl']['enqueued'] );
+		$this->assertSame( [], $GLOBALS['pl']['i18n'] );
+	}
+
+	/**
+	 * No manifest is no build: nothing is registered, rather than a script
+	 * with no dependencies that runs before what it imports.
+	 */
+	public function test_an_entry_never_built_is_not_registered(): void {
+		$this->assertNull( Assets::built_manifest( self::nested(), 'orphan' ) );
+		$this->assertNull( Assets::built_manifest( self::nested(), 'missing' ) );
+		$this->assertFalse( Assets::enqueue_built_script( 'lib-orphan', self::nested(), 'orphan' ) );
+		$this->assertFalse( Assets::enqueue_built_script( 'lib-missing', self::nested(), '../../../composer' ) );
+		$this->assertFalse( Assets::enqueue_built_script( 'lib-gone', self::nested(), 'gone' ), 'A manifest whose script is missing was registered.' );
+		$this->assertSame( [], $GLOBALS['pl']['i18n'] );
+		$this->assertSame( [], $GLOBALS['pl']['scripts'] );
+		$this->assertSame( [], $GLOBALS['pl']['enqueued'] );
 	}
 }
