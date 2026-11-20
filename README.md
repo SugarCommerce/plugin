@@ -389,52 +389,12 @@ because Strauss would prefix a namespace it found in a string.
 Columns, emails, fields, flyouts, geo, importers, jobs, onboarding, reports,
 storage and tables all ask `Build`.
 
-## Moving from arraypress/wp-*
+## Security
 
-From `arraypress/wp-register-plugin` (`ArrayPress\RegisterPlugin`),
-`arraypress/wp-composer-assets` (`ArrayPress\ComposerAssets`) and
-`arraypress/wp-slurp` (`ArrayPress\Slurp`). The global
-functions are gone -- a library bundled into several plugins must not
-declare any -- and each is a static method. Every configuration key keeps its
-name and meaning.
-
-| Old | New |
-|-----|-----|
-| `register_plugin( __FILE__, $boot, $config )` | `Plugin::register( __FILE__, $boot, $config )` |
-| `register_edd_plugin( … )` (Strauss: `eddsp_register_edd_plugin`) | `Plugin::edd( … )` |
-| `register_woocommerce_plugin( … )` | `Plugin::woocommerce( … )` |
-| `register_network_plugin( … )` | `Plugin::network( … )` (now also shows links and notices in the network admin) |
-| `ArrayPress\RegisterPlugin\Plugin::register( [ 'file', 'bootstrap', … ] )` | `Plugin::register( $file, $bootstrap, $config )` |
-| `new Plugin( $config )` then `->setup()` | the same, under `SugarCommerce\Plugin` |
-| `Plugin::merge_config()` | `Plugin::merge_config()` |
-| `$plugin->delayed_setup()`, `->plugins_loaded()` | `$plugin->run()` |
-| `ArrayPress\RegisterPlugin\Requirements` | `SugarCommerce\Plugin\Requirements` |
-| `Requirements::get_errors()` | `Requirements::errors()` |
-| — | `Requirements::requirements()`, `::conflicts()`, `::known()`, `$plugin->loaded()`, `->id()`, `Plugin::get()` |
-| preset floors PHP 7.4, WordPress 6.8.4 | PHP 8.3, WordPress 7.1 (a caller's own still win) |
-| user meta `wp_register_plugin_dismissed_{notice}` | `{id}_notice_dismissed_{notice}` |
-| option `wp_register_plugin_shown_{notice}` | `{id}_notice_shown_{notice}` |
-| AJAX action `wp_register_plugin_dismiss_notice` | `{id}_dismiss_notice` |
-| dismissing needed `manage_options` | needs the notice's own `capability` |
-| `css_class_prefix` default `arraypress` | `sugarcommerce` |
-| a `plugin_links` URL alone: text was the key as written (`settings`) | the key capitalised (`Settings`), as `plugin_meta` always did |
-| text domain `arraypress` | text domain `sugarcommerce` |
-| `arraypress_enqueue_composer_script()` / `wp_enqueue_composer_script()` | `Assets::enqueue_script()` |
-| `arraypress_enqueue_composer_style()` / `wp_enqueue_composer_style()` | `Assets::enqueue_style()` |
-| `arraypress_register_composer_script()` / `wp_register_composer_script()` | `Assets::register_script()` |
-| `arraypress_register_composer_style()` / `wp_register_composer_style()` | `Assets::register_style()` |
-| `arraypress_get_composer_file()` / `wp_get_composer_file()`, `AssetLoader::get_file()` | `Assets::contents()` |
-| `AssetLoader::resolve_asset()` | `Assets::resolve()` |
-| `AssetLoader::locate_assets()` | `Assets::locate()` |
-| `AssetLoader::clear_cache()` | `Assets::clear_cache()` |
-| — | `Assets::url()`, `Assets::path()`, `Assets::path_to_url()` |
-| `ArrayPress\Slurp\Slurp::dir()`, `dirs()`, `files()`, `SKIP` | `SugarCommerce\Plugin\Slurp::` the same (same answers) |
-| an `includes` / `early_includes` entry that was a folder: a fatal `require_once` | the folder's files, in name order |
-
-Fixed on the way: registering a file twice set it up twice; a second
-requirements check lost an `exists` callable; a requirement named like a PHP
-function (`Date`) was called; a `setup_hooks` method callback (`[ $obj,
-'method' ]`) fatalled; a `current` callable alone never counted as present.
+* Remembers a dismissed notice only for a request carrying its nonce, from a user with the notice's capability (`manage_options` when it names none)
+* Prints notices through core's `wp_admin_notice()`, with `wp_kses_post()` on the message, and escapes every link it adds to the plugins screen
+* Serves an asset only from inside the package's `assets/` folder: a path with `..` or a null byte is nothing, even when a setting built it
+* Reads a built script's manifest only from the package's `assets/build/`, by an entry name reduced to a key
 
 ## Requirements
 
