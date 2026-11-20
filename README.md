@@ -391,6 +391,26 @@ because Strauss would prefix a namespace it found in a string.
 Columns, emails, fields, flyouts, geo, importers, jobs, onboarding, reports,
 storage and tables all ask `Build`.
 
+A package that only needs hooks, keys and handles extends `Runtime` once, in
+its own namespace, and has all of them named for its build -- the namespace
+is read from the subclass, so nothing is passed:
+
+```php
+namespace SugarCommerce\S3\Utils;
+
+final class Runtime extends \SugarCommerce\Plugin\Runtime {
+    protected const string LIBRARY      = 'sugarcommerce_s3';
+    protected const int    OWN_SEGMENTS = 3;   // SugarCommerce\S3\Utils
+}
+
+Runtime::hook( 'uploaded' );   // sugarcommerce_s3_uploaded; sugarcart_sugarcommerce_s3_uploaded in SugarCart's copy
+Runtime::key( 'cache' );       // an option or transient key
+Runtime::handle( 'admin' );    // sugarcommerce-s3-admin
+Runtime::build();              // '' unprefixed, 'sugarcart' in SugarCart's copy
+```
+
+S3, storage and storage-browser are built on it.
+
 ## Security
 
 * Remembers a dismissed notice only through its REST route -- so with the REST nonce -- for one of the plugin's own dismissible notices, from a user with the notice's capability (`manage_options` when it names none)
