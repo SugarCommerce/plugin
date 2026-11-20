@@ -306,9 +306,12 @@ final class Notices {
 	/**
 	 * Post a dismissal when a dismissible notice's close button is pressed.
 	 *
-	 * Each notice carries its own action and nonce, so one listener serves
-	 * every plugin using this library, however many copies Strauss made; the
-	 * window flag keeps a second copy from adding a second listener.
+	 * One listener per copy of this library, for that copy's notices only:
+	 * each notice's route starts with its build's namespace, and the
+	 * listener answers only those. Another plugin's copy -- another version
+	 * -- never handles this one's, and the flag that keeps a page from
+	 * listening twice is the build's own entry in
+	 * `window.SugarCommerceNotices`, never a name two copies share.
 	 *
 	 * @return void
 	 */
@@ -326,20 +329,22 @@ final class Notices {
 		wp_enqueue_script( 'wp-api-fetch' );
 		?>
 		<script>
-			( function () {
-				if ( window.sugarcommerceNoticeDismiss ) {
+			( function ( build ) {
+				var seen = ( window.SugarCommerceNotices = window.SugarCommerceNotices || {} );
+				if ( seen[ build ] ) {
 					return;
 				}
-				window.sugarcommerceNoticeDismiss = true;
+				seen[ build ] = true;
 				document.addEventListener( 'click', function ( event ) {
 					var button = event.target.closest && event.target.closest( '.notice-dismiss' );
 					var notice = button && button.closest( '[data-sugarcommerce-dismiss]' );
-					if ( ! notice || ! window.wp || ! window.wp.apiFetch ) {
+					var path   = notice ? notice.getAttribute( 'data-sugarcommerce-dismiss' ) : '';
+					if ( 0 !== path.indexOf( '/' + build + '/' ) || ! window.wp || ! window.wp.apiFetch ) {
 						return;
 					}
-					window.wp.apiFetch( { path: notice.getAttribute( 'data-sugarcommerce-dismiss' ), method: 'POST' } ).catch( function () {} );
+					window.wp.apiFetch( { path: path, method: 'POST' } ).catch( function () {} );
 				} );
-			}() );
+			}( <?php echo wp_json_encode( self::rest_namespace() ); ?> ) );
 		</script>
 		<?php
 	}

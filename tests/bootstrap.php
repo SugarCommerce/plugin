@@ -225,6 +225,10 @@ function esc_attr( $text ) {
 	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 }
 
+function wp_json_encode( $data, $flags = 0, $depth = 512 ) {
+	return json_encode( $data, $flags, $depth );
+}
+
 function esc_url( $url ) {
 	$url = (string) $url;
 

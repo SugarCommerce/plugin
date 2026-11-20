@@ -159,6 +159,12 @@ final class NoticesTest extends PluginTestCase {
 		$this->assertStringContainsString( 'class="notice notice-info is-dismissible"', $output );
 		$this->assertStringContainsString( 'data-sugarcommerce-dismiss="/sugarcommerce-plugin/v1/noticed/notices/welcome/dismissal"', $output );
 		$this->assertStringContainsString( 'window.wp.apiFetch', $output );
+
+		// Its listener is this build's, answering this build's notices only.
+		$this->assertStringContainsString( '}( "sugarcommerce-plugin\\/v1" ) );', $output );
+		$this->assertStringContainsString( 'window.SugarCommerceNotices', $output );
+		$this->assertStringContainsString( "0 !== path.indexOf( '/' + build + '/' )", $output );
+		$this->assertStringNotContainsString( 'sugarcommerceNoticeDismiss', $output );
 		$this->assertStringNotContainsString( 'admin-ajax', $output );
 		$this->assertContains( 'script:wp-api-fetch', $GLOBALS['pl']['enqueued'] );
 	}
