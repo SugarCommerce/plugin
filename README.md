@@ -261,7 +261,9 @@ before `init`. A link may also take `style`. Links opening a new tab get
 Each notice is printed by core's `wp_admin_notice()`, so it has core's markup
 and escaping and another plugin's `wp_admin_notice_args` / `_markup` filters
 reach it. What core does not do is remember a dismissal -- its close button
-hides a notice until the next page -- and that is what this adds.
+hides a notice until the next page -- and that is what this adds, through
+the REST API: the close button posts to the plugin's route with core's
+`wp.apiFetch`, which carries the REST nonce.
 
 Everything remembered is named from the plugin's id, so two plugins that both
 call a notice `welcome` keep separate dismissals:
@@ -270,7 +272,7 @@ call a notice `welcome` keep separate dismissals:
 |--------|------|
 | user meta, a dismissal | `{id}_notice_dismissed_{notice}` |
 | option, a show-once notice shown | `{id}_notice_shown_{notice}` |
-| AJAX action and nonce | `{id}_dismiss_notice` |
+| REST route, a dismissal | `POST /{build-}sugarcommerce-plugin/v1/{id}/notices/{notice}/dismissal` |
 
 ## Presets
 
@@ -391,7 +393,7 @@ storage and tables all ask `Build`.
 
 ## Security
 
-* Remembers a dismissed notice only for a request carrying its nonce, from a user with the notice's capability (`manage_options` when it names none)
+* Remembers a dismissed notice only through its REST route -- so with the REST nonce -- for one of the plugin's own dismissible notices, from a user with the notice's capability (`manage_options` when it names none)
 * Prints notices through core's `wp_admin_notice()`, with `wp_kses_post()` on the message, and escapes every link it adds to the plugins screen
 * Serves an asset only from inside the package's `assets/` folder: a path with `..` or a null byte is nothing, even when a setting built it
 * Reads a built script's manifest only from the package's `assets/build/`, by an entry name reduced to a key

@@ -75,6 +75,7 @@ function pl_reset(): void {
 		'enqueued'    => [],
 		'i18n'        => [],
 		'nonce_ok'    => true,
+		'routes'      => [],
 		'header'      => [ 'Version' => '2.4.0' ],
 		'auto_update' => true,
 	];
@@ -306,6 +307,51 @@ function wp_is_auto_update_enabled_for_type( $type ) {
 	return $GLOBALS['pl']['auto_update'];
 }
 
+function register_rest_route( $route_namespace, $route, $args = [] ) {
+	$GLOBALS['pl']['routes'][ '/' . $route_namespace . $route ] = $args;
+
+	return true;
+}
+
+function rest_authorization_required_code() {
+	return 403;
+}
+
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+	/**
+	 * Enough of WP_REST_Request: its parameters, read as an array.
+	 */
+	class WP_REST_Request implements ArrayAccess {
+
+		/**
+		 * Parameters.
+		 *
+		 * @var array<string, mixed>
+		 */
+		private array $params = [];
+
+		public function set_param( $key, $value ): void {
+			$this->params[ $key ] = $value;
+		}
+
+		public function offsetExists( mixed $offset ): bool {
+			return isset( $this->params[ $offset ] );
+		}
+
+		public function offsetGet( mixed $offset ): mixed {
+			return $this->params[ $offset ] ?? null;
+		}
+
+		public function offsetSet( mixed $offset, mixed $value ): void {
+			$this->params[ $offset ] = $value;
+		}
+
+		public function offsetUnset( mixed $offset ): void {
+			unset( $this->params[ $offset ] );
+		}
+	}
+}
+
 function wp_create_nonce( $action ) {
 	return 'nonce-' . $action;
 }
@@ -361,8 +407,33 @@ if ( ! class_exists( 'WP_Error' ) ) {
 		 */
 		private array $errors = [];
 
+		/**
+		 * Data, by code.
+		 *
+		 * @var array<string, mixed>
+		 */
+		private array $data = [];
+
+		public function __construct( $code = '', $message = '', $data = '' ) {
+			if ( '' !== $code ) {
+				$this->add( $code, $message, $data );
+			}
+		}
+
 		public function add( $code, $message, $data = '' ): void {
 			$this->errors[ $code ][] = $message;
+
+			if ( '' !== $data ) {
+				$this->data[ $code ] = $data;
+			}
+		}
+
+		public function get_error_code() {
+			return array_key_first( $this->errors ) ?? '';
+		}
+
+		public function get_error_data( $code = '' ) {
+			return $this->data[ '' === $code ? $this->get_error_code() : $code ] ?? null;
 		}
 
 		public function get_error_codes(): array {

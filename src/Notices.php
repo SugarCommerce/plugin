@@ -9,6 +9,9 @@ declare( strict_types=1 );
 
 namespace SugarCommerce\Plugin;
 
+use WP_Error;
+use WP_REST_Request;
+
 /**
  * A loaded plugin's admin notices: a welcome, a nudge to finish setting up.
  *
@@ -27,7 +30,10 @@ namespace SugarCommerce\Plugin;
  * What is remembered is named from the plugin's id, so two plugins that
  * both call their notice `welcome` no longer share one dismissal: the user
  * meta is `{id}_notice_dismissed_{notice}`, the option
- * `{id}_notice_shown_{notice}`, and the AJAX action `{id}_dismiss_notice`.
+ * `{id}_notice_shown_{notice}`, and the REST route that dismisses one
+ * `POST {namespace}/{id}/notices/{notice}/dismissal` -- its namespace named
+ * from the build, `sugarcommerce-plugin/v1` unprefixed, so two bundled
+ * copies never answer each other's.
  */
 final class Notices {
 
@@ -50,16 +56,53 @@ final class Notices {
 			add_action( 'network_admin_notices', [ $this, 'render' ] );
 		}
 
-		add_action( 'wp_ajax_' . $this->action(), [ $this, 'dismiss' ] );
+		add_action( 'rest_api_init', [ $this, 'register_route' ] );
 	}
 
 	/**
-	 * The AJAX action, which is also the nonce action.
+	 * The REST namespace, named from the build this copy belongs to.
 	 *
 	 * @return string
 	 */
-	public function action(): string {
-		return $this->plugin->id() . '_dismiss_notice';
+	public static function rest_namespace(): string {
+		$build = Build::name( __NAMESPACE__, 2 );
+
+		return ( '' === $build ? '' : $build . '-' ) . 'sugarcommerce-plugin/v1';
+	}
+
+	/**
+	 * Where a notice of this plugin's is dismissed, for apiFetch's `path`.
+	 *
+	 * @param string $notice The notice's id.
+	 *
+	 * @return string
+	 */
+	public function path( string $notice ): string {
+		return '/' . self::rest_namespace() . '/' . $this->plugin->id() . '/notices/' . sanitize_key( $notice ) . '/dismissal';
+	}
+
+	/**
+	 * Register the dismissal route. Hooked on rest_api_init.
+	 *
+	 * @return void
+	 */
+	public function register_route(): void {
+		register_rest_route(
+			self::rest_namespace(),
+			'/' . $this->plugin->id() . '/notices/(?P<notice>[a-z0-9_-]+)/dismissal',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'dismiss' ],
+				'permission_callback' => [ $this, 'may_dismiss' ],
+				'args'                => [
+					'notice' => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_key',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -110,35 +153,49 @@ final class Notices {
 	}
 
 	/**
-	 * Remember that the current user dismissed a notice.
+	 * Whether the current user may dismiss the notice a request names.
 	 *
-	 * The capability asked is the notice's own (manage_options when it names
-	 * none), so a shop manager who was shown a notice can dismiss it. Only
-	 * this plugin's notices can be dismissed through its action.
+	 * Only this plugin's own dismissible notices, and only for a user the
+	 * notice is for: its capability, or manage_options when it names none.
+	 * The REST nonce has been checked by then -- WordPress does it for a
+	 * cookie-authenticated request before any permission callback -- so a
+	 * page an administrator visits cannot make their browser dismiss one.
 	 *
-	 * @return void
+	 * @param WP_REST_Request $request The request.
+	 *
+	 * @return true|WP_Error
 	 */
-	public function dismiss(): void {
-		// A capability check answers "may this user dismiss notices", not
-		// "did this user ask to". Without a nonce, any page an administrator
-		// visits can make their browser post here and write user meta.
-		check_ajax_referer( $this->action() );
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked above.
-		$notice_id = sanitize_key( wp_unslash( (string) ( $_POST['notice_id'] ?? '' ) ) );
+	public function may_dismiss( WP_REST_Request $request ): true|WP_Error {
+		$notice_id = sanitize_key( (string) $request['notice'] );
 		$notices   = $this->notices();
 
 		if ( '' === $notice_id || ! isset( $notices[ $notice_id ] ) || empty( $notices[ $notice_id ]['dismissible'] ) ) {
-			wp_die( -1, '', [ 'response' => 400 ] );
+			return new WP_Error( 'rest_notice_not_found', __( 'There is no such notice to dismiss.', 'sugarcommerce' ), [ 'status' => 404 ] );
 		}
 
 		if ( ! current_user_can( (string) ( $notices[ $notice_id ]['capability'] ?? '' ) ?: 'manage_options' ) ) {
-			wp_die( -1, '', [ 'response' => 403 ] );
+			return new WP_Error( 'rest_forbidden', __( 'You cannot dismiss that notice.', 'sugarcommerce' ), [ 'status' => rest_authorization_required_code() ] );
 		}
+
+		return true;
+	}
+
+	/**
+	 * Remember that the current user dismissed a notice.
+	 *
+	 * @param WP_REST_Request $request The request, allowed by may_dismiss().
+	 *
+	 * @return array{dismissed: bool, notice: string}
+	 */
+	public function dismiss( WP_REST_Request $request ): array {
+		$notice_id = sanitize_key( (string) $request['notice'] );
 
 		update_user_meta( get_current_user_id(), $this->dismissed_key( $notice_id ), true );
 
-		wp_die( 1 );
+		return [
+			'dismissed' => true,
+			'notice'    => $notice_id,
+		];
 	}
 
 	/**
@@ -224,8 +281,7 @@ final class Notices {
 		$attributes  = [ 'data-notice-id' => $notice_id ];
 
 		if ( $dismissible ) {
-			$attributes['data-sugarcommerce-dismiss'] = $this->action();
-			$attributes['data-nonce']                 = wp_create_nonce( $this->action() );
+			$attributes['data-sugarcommerce-dismiss'] = $this->path( $notice_id );
 		}
 
 		if ( ! empty( $notice['show_once'] ) ) {
@@ -264,6 +320,10 @@ final class Notices {
 		}
 
 		$printed = true;
+
+		// The REST client, with core's nonce middleware; in the footer, and
+		// asked for only when the click comes.
+		wp_enqueue_script( 'wp-api-fetch' );
 		?>
 		<script>
 			( function () {
@@ -274,14 +334,10 @@ final class Notices {
 				document.addEventListener( 'click', function ( event ) {
 					var button = event.target.closest && event.target.closest( '.notice-dismiss' );
 					var notice = button && button.closest( '[data-sugarcommerce-dismiss]' );
-					if ( ! notice || typeof window.ajaxurl !== 'string' ) {
+					if ( ! notice || ! window.wp || ! window.wp.apiFetch ) {
 						return;
 					}
-					var body = new URLSearchParams();
-					body.append( 'action', notice.getAttribute( 'data-sugarcommerce-dismiss' ) );
-					body.append( 'notice_id', notice.getAttribute( 'data-notice-id' ) );
-					body.append( '_ajax_nonce', notice.getAttribute( 'data-nonce' ) );
-					window.fetch( window.ajaxurl, { method: 'POST', credentials: 'same-origin', body: body } );
+					window.wp.apiFetch( { path: notice.getAttribute( 'data-sugarcommerce-dismiss' ), method: 'POST' } ).catch( function () {} );
 				} );
 			}() );
 		</script>

@@ -11,7 +11,8 @@ namespace SugarCommerce\Plugin\Tests;
 
 use SugarCommerce\Plugin\Notices;
 use SugarCommerce\Plugin\Plugin;
-use WP_Die_Exception;
+use WP_Error;
+use WP_REST_Request;
 
 /**
  * A loaded plugin's notices, and dismissing them.
@@ -43,23 +44,35 @@ final class NoticesTest extends PluginTestCase {
 	}
 
 	/**
-	 * Post a dismissal and return what wp_die() was given.
+	 * POST a dismissal to the plugin's route, as the REST server would:
+	 * the permission check, then the callback.
 	 *
-	 * @param string $action    The action posted to.
+	 * @param string $plugin_id The plugin's id.
 	 * @param string $notice_id The notice.
 	 *
-	 * @return WP_Die_Exception
+	 * @return int The status the server would answer with.
 	 */
-	private function dismiss( string $action, string $notice_id ): WP_Die_Exception {
-		$_POST['notice_id'] = $notice_id;
+	private function dismiss( string $plugin_id, string $notice_id ): int {
+		pl_fire( 'rest_api_init' );
 
-		try {
-			do_action( 'wp_ajax_' . $action );
-		} catch ( WP_Die_Exception $e ) {
-			return $e;
+		$route = $GLOBALS['pl']['routes'][ '/' . Notices::rest_namespace() . '/' . $plugin_id . '/notices/(?P<notice>[a-z0-9_-]+)/dismissal' ] ?? null;
+
+		$this->assertNotNull( $route, 'no dismissal route for ' . $plugin_id );
+		$this->assertSame( 'POST', $route['methods'] );
+
+		$request = new WP_REST_Request();
+		$request->set_param( 'notice', $notice_id );
+
+		$allowed = call_user_func( $route['permission_callback'], $request );
+
+		if ( $allowed instanceof WP_Error ) {
+			return (int) $allowed->get_error_data()['status'];
 		}
 
-		$this->fail( 'The handler did not stop.' );
+		$this->assertTrue( $allowed );
+		$this->assertSame( [ 'dismissed' => true, 'notice' => $notice_id ], call_user_func( $route['callback'], $request ) );
+
+		return 200;
 	}
 
 	public function test_a_notice_is_printed(): void {
@@ -138,20 +151,32 @@ final class NoticesTest extends PluginTestCase {
 		$this->assertSame( '', $this->printed() );
 	}
 
-	public function test_a_dismissible_notice_carries_its_action_and_the_script(): void {
+	public function test_a_dismissible_notice_carries_its_route_and_the_script(): void {
 		$this->load( [ 'welcome' => [ 'message' => 'Hi', 'dismissible' => true ] ] );
 
 		$output = $this->printed();
 
 		$this->assertStringContainsString( 'class="notice notice-info is-dismissible"', $output );
-		$this->assertStringContainsString( 'data-sugarcommerce-dismiss="noticed_dismiss_notice" data-nonce="nonce-noticed_dismiss_notice"', $output );
-		$this->assertStringContainsString( 'window.sugarcommerceNoticeDismiss', $output );
+		$this->assertStringContainsString( 'data-sugarcommerce-dismiss="/sugarcommerce-plugin/v1/noticed/notices/welcome/dismissal"', $output );
+		$this->assertStringContainsString( 'window.wp.apiFetch', $output );
+		$this->assertStringNotContainsString( 'admin-ajax', $output );
+		$this->assertContains( 'script:wp-api-fetch', $GLOBALS['pl']['enqueued'] );
+	}
+
+	/**
+	 * Through REST, not admin-ajax: nothing listens there any more.
+	 */
+	public function test_there_is_no_ajax_action(): void {
+		$this->load( [ 'welcome' => [ 'message' => 'Hi', 'dismissible' => true ] ] );
+
+		$this->assertFalse( has_action( 'wp_ajax_noticed_dismiss_notice' ) );
+		$this->assertTrue( (bool) has_action( 'rest_api_init' ) );
 	}
 
 	public function test_dismissing_is_remembered_for_the_user(): void {
 		$plugin = $this->load( [ 'welcome' => [ 'message' => 'Hi', 'dismissible' => true ] ] );
 
-		$this->assertSame( 1, $this->dismiss( 'noticed_dismiss_notice', 'welcome' )->value );
+		$this->assertSame( 200, $this->dismiss( 'noticed', 'welcome' ) );
 		$this->assertTrue( $GLOBALS['pl']['user_meta'][1][ ( new Notices( $plugin ) )->dismissed_key( 'welcome' ) ] );
 		$this->assertSame( '', $this->printed() );
 	}
@@ -179,7 +204,7 @@ final class NoticesTest extends PluginTestCase {
 		$this->load( [ 'welcome' => [ 'message' => 'First', 'dismissible' => true ] ], 'first-plugin' );
 		$this->load( [ 'welcome' => [ 'message' => 'Second', 'dismissible' => true ] ], 'second-plugin' );
 
-		$this->dismiss( 'first_plugin_dismiss_notice', 'welcome' );
+		$this->dismiss( 'first_plugin', 'welcome' );
 
 		$output = $this->printed();
 
@@ -187,20 +212,20 @@ final class NoticesTest extends PluginTestCase {
 		$this->assertStringContainsString( 'Second', $output );
 	}
 
-	public function test_a_bad_nonce_is_refused(): void {
+	public function test_a_user_without_the_capability_is_refused(): void {
 		$this->load( [ 'welcome' => [ 'message' => 'Hi', 'dismissible' => true ] ] );
 
-		$GLOBALS['pl']['nonce_ok'] = false;
+		$GLOBALS['pl']['caps'] = [];
 
-		$this->assertSame( 403, $this->dismiss( 'noticed_dismiss_notice', 'welcome' )->status );
+		$this->assertSame( 403, $this->dismiss( 'noticed', 'welcome' ) );
 		$this->assertSame( [], $GLOBALS['pl']['user_meta'] );
 	}
 
 	public function test_only_its_own_dismissible_notices_can_be_dismissed(): void {
 		$this->load( [ 'welcome' => [ 'message' => 'Hi', 'dismissible' => true ], 'fixed' => [ 'message' => 'Stays' ] ] );
 
-		$this->assertSame( 400, $this->dismiss( 'noticed_dismiss_notice', 'somebody_elses' )->status );
-		$this->assertSame( 400, $this->dismiss( 'noticed_dismiss_notice', 'fixed' )->status );
+		$this->assertSame( 404, $this->dismiss( 'noticed', 'somebody_elses' ) );
+		$this->assertSame( 404, $this->dismiss( 'noticed', 'fixed' ) );
 		$this->assertSame( [], $GLOBALS['pl']['user_meta'] );
 	}
 
@@ -219,7 +244,7 @@ final class NoticesTest extends PluginTestCase {
 			]
 		);
 
-		$this->assertSame( 1, $this->dismiss( 'noticed_dismiss_notice', 'shop' )->value );
-		$this->assertSame( 403, $this->dismiss( 'noticed_dismiss_notice', 'admin' )->status );
+		$this->assertSame( 200, $this->dismiss( 'noticed', 'shop' ) );
+		$this->assertSame( 403, $this->dismiss( 'noticed', 'admin' ) );
 	}
 }
