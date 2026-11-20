@@ -317,6 +317,7 @@ add_action( 'admin_enqueue_scripts', static function () {
 | `contents( __FILE__, 'icons/cart.svg' )` | the file's contents, or false |
 | `resolve()`, `locate()` | the file, or the assets folder, as `path` and `url` |
 | `path_to_url( $absolute_path )` | the URL of any path under WordPress, for files outside `assets/` |
+| `handle( __NAMESPACE__, 'breadcrumbs' )` | a handle for this copy of the package: `sugarcommerce-breadcrumbs`, `myshop-vendor-sugarcommerce-breadcrumbs` once Strauss prefixed it, so two bundled copies never share one |
 
 A version of `false` (the default) is the file's modification time, so an
 edit busts caches; a string is used as given, and null adds none. A path

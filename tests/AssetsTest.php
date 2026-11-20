@@ -101,6 +101,13 @@ final class AssetsTest extends TestCase {
 		return $root;
 	}
 
+	public function test_a_handle_is_named_for_the_copy_of_the_package(): void {
+		$this->assertSame( 'sugarcommerce-breadcrumbs', Assets::handle( 'SugarCommerce\\Breadcrumbs', 'breadcrumbs' ) );
+		$this->assertSame( 'myshop-vendor-sugarcommerce-status-badge', Assets::handle( 'MyShop\\Vendor\\SugarCommerce\\StatusBadge', 'status-badge' ) );
+		$this->assertSame( 'playground-lib-breadcrumbs', Assets::handle( 'Playground\\Lib\\Breadcrumbs', 'breadcrumbs' ) );
+		$this->assertSame( 'breadcrumbs', Assets::handle( 'Breadcrumbs', 'Breadcrumbs' ) );
+	}
+
 	public function test_a_packages_own_assets_folder_is_found(): void {
 		$this->assertSame(
 			[

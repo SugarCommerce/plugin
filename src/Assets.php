@@ -398,6 +398,38 @@ final class Assets {
 	}
 
 	/**
+	 * A script or style handle for one copy of a package, from the
+	 * namespace it was compiled under.
+	 *
+	 * Derived from the namespace rather than written as a literal, because
+	 * Strauss renames namespaces and does not rename strings. Two plugins
+	 * each bundling a prefixed copy would otherwise register one handle; the
+	 * second registration is a silent no-op, so whichever plugin loaded
+	 * first would decide which version of the file the other got.
+	 *
+	 *     Assets::handle( __NAMESPACE__, 'breadcrumbs' );
+	 *     // sugarcommerce-breadcrumbs; myshop-vendor-sugarcommerce-breadcrumbs once prefixed
+	 *
+	 * @since 1.3.0
+	 *
+	 * @param string $under     The caller's `__NAMESPACE__`: the package's
+	 *                          own, one segment below the vendor
+	 *                          (`SugarCommerce\Breadcrumbs`). Not a trait's,
+	 *                          whose `__NAMESPACE__` is its own.
+	 * @param string $name      The package's name in the handle.
+	 *
+	 * @return string
+	 */
+	public static function handle( string $under, string $name ): string {
+		$cut  = strrpos( $under, '\\' );
+		$root = false === $cut ? '' : substr( $under, 0, $cut );
+		$root = trim( strtolower( (string) preg_replace( '/[^A-Za-z0-9]+/', '-', $root ) ), '-' );
+		$name = trim( strtolower( (string) preg_replace( '/[^A-Za-z0-9]+/', '-', $name ) ), '-' );
+
+		return '' === $root ? $name : $root . '-' . $name;
+	}
+
+	/**
 	 * Forget every folder found. For tests, and after moving things on disk.
 	 *
 	 * @return void
