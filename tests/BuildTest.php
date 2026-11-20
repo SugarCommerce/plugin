@@ -56,6 +56,57 @@ final class BuildTest extends TestCase {
 	}
 
 	/**
+	 * Another package's class is named in the caller's own build.
+	 *
+	 * @param string $under    The namespace the caller is compiled under.
+	 * @param int    $depth    How many segments the caller's own namespace has.
+	 * @param string $expected The sibling's full name.
+	 */
+	#[DataProvider( 'siblings' )]
+	public function test_a_sibling_is_named_in_the_callers_build( string $under, int $depth, string $expected ): void {
+		$this->assertSame( $expected, Build::sibling( $under, $depth, 'Fields\\Icons\\Icons' ) );
+	}
+
+	/**
+	 * Namespaces and where each finds fields' Icons.
+	 *
+	 * @return array<string, array{string, int, string}>
+	 */
+	public static function siblings(): array {
+		return [
+			'unprefixed'            => [ 'SugarCommerce\\Columns\\Utils', 3, 'SugarCommerce\\Fields\\Icons\\Icons' ],
+			'unprefixed, shallower' => [ 'SugarCommerce\\Columns', 2, 'SugarCommerce\\Fields\\Icons\\Icons' ],
+			'a leading slash'       => [ '\\SugarCommerce\\Columns\\Utils', 3, 'SugarCommerce\\Fields\\Icons\\Icons' ],
+			'a vendor prefix'       => [ 'SugarCart\\Vendor\\SugarCommerce\\Columns\\Utils', 3, 'SugarCart\\Vendor\\SugarCommerce\\Fields\\Icons\\Icons' ],
+			'a plugin namespace'    => [ 'ArrayPress\\EDD\\FraudFilter\\Lib\\Columns\\Utils', 3, 'ArrayPress\\EDD\\FraudFilter\\Lib\\Fields\\Icons\\Icons' ],
+			'a plugin, deeper'      => [ 'ArrayPress\\EDD\\FraudFilter\\Lib\\Columns\\Traits\\Abstracts\\RowActions', 5, 'ArrayPress\\EDD\\FraudFilter\\Lib\\Fields\\Icons\\Icons' ],
+			'a one-segment Lib'     => [ 'Playground\\Lib\\Columns\\Utils', 3, 'Playground\\Lib\\Fields\\Icons\\Icons' ],
+			'deeper than it is'     => [ 'Columns', 3, 'Columns\\Fields\\Icons\\Icons' ],
+		];
+	}
+
+	/**
+	 * A class written with a leading backslash is still one name.
+	 */
+	public function test_a_sibling_written_fully_qualified_is_one_name(): void {
+		$this->assertSame( 'SugarCommerce\\Money\\Money', Build::sibling( 'SugarCommerce\\Columns\\Utils', 3, '\\Money\\Money' ) );
+	}
+
+	/**
+	 * Two plugins bundling the same package never find each other's
+	 * sibling, nor the unprefixed one SugarCart loads.
+	 */
+	public function test_a_sibling_is_never_another_builds(): void {
+		$names = [
+			Build::sibling( 'ArrayPress\\EDD\\FraudFilter\\Lib\\Columns\\Utils', 3, 'Money\\Money' ),
+			Build::sibling( 'ArrayPress\\EDD\\SalePrices\\Lib\\Columns\\Utils', 3, 'Money\\Money' ),
+			Build::sibling( 'SugarCommerce\\Columns\\Utils', 3, 'Money\\Money' ),
+		];
+
+		$this->assertCount( 3, array_unique( $names ) );
+	}
+
+	/**
 	 * Two plugins under one vendor, each with its packages in its own Lib, are
 	 * two builds: the vendor segment they share does not name either.
 	 */

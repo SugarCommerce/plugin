@@ -392,6 +392,34 @@ because Strauss would prefix a namespace it found in a string.
 Columns, emails, fields, flyouts, geo, importers, jobs, onboarding, reports,
 storage and tables all ask `Build`.
 
+### A package you can do without
+
+Strauss rewrites the namespaces of the packages a plugin bundles and nothing
+else. A `use` of a package this one only suggests stays `SugarCommerce\…`
+when the plugin left it out -- and with SugarCart active (it loads the
+packages unprefixed) `class_exists()` then finds SugarCart's copy, at
+SugarCart's version, from inside another plugin. Name such a class through
+`Build::sibling()`: it is the class in the caller's own build, or one that
+does not exist.
+
+```php
+$icons = Build::sibling( __NAMESPACE__, 3, 'Fields\Icons\Icons' );
+
+if ( class_exists( $icons ) ) {
+    echo $icons::render( 'heroicons-outline:bolt' );
+}
+```
+
+| Compiled under | `Build::sibling( …, 3, 'Fields\Icons\Icons' )` |
+|----------------|-----------------------------------------------|
+| `SugarCommerce\Columns\Utils` | `SugarCommerce\Fields\Icons\Icons` |
+| `ArrayPress\EDD\FraudFilter\Lib\Columns\Utils` | `ArrayPress\EDD\FraudFilter\Lib\Fields\Icons\Icons` |
+| `Playground\Lib\Columns\Utils` | `Playground\Lib\Fields\Icons\Icons` |
+
+A package it requires is named with `::class` as usual. Every package's
+`StructureTest` fails on a string naming `SugarCommerce\…` and on a `use` of
+a package its composer.json does not require.
+
 A package that only needs hooks, keys and handles extends `Runtime` once, in
 its own namespace, and has all of them named for its build -- the namespace
 is read from the subclass, so nothing is passed:

@@ -138,7 +138,7 @@ final class Plugin {
 		} catch ( InvalidArgumentException $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a developer's mistake, reported where developers look.
-				error_log( 'SugarCommerce\Plugin: ' . $e->getMessage() );
+				error_log( self::class . ': ' . $e->getMessage() );
 			}
 
 			return null;

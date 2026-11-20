@@ -65,4 +65,38 @@ final class Build {
 
 		return strtolower( trim( (string) preg_replace( '/[^A-Za-z0-9]+/', '-', implode( '-', $segments ) ), '-' ) );
 	}
+
+	/**
+	 * A class of another package, named as this build names it.
+	 *
+	 * For a package this one can do without (a `suggest`, not a `require`).
+	 * Strauss rewrites only the namespaces of the packages a plugin bundles,
+	 * so a `use` of one it left out stays unprefixed -- and with SugarCart
+	 * active, `class_exists()` then finds SugarCart's copy, at SugarCart's
+	 * version, from inside another plugin. Asked this way instead, the name
+	 * is the one in the caller's own build, or a class that does not exist:
+	 *
+	 *     $icons = Build::sibling( __NAMESPACE__, 3, 'Fields\Icons\Icons' );
+	 *
+	 *     if ( class_exists( $icons ) ) {
+	 *         $icons::render( $value );
+	 *     }
+	 *
+	 * @param string $under    The namespace the caller is compiled under, prefixed or not.
+	 * @param int    $depth    How many segments the caller's own namespace has
+	 *                         unprefixed: 3 for SugarCommerce\Columns\Utils.
+	 * @param string $relative The class after the `SugarCommerce\` segment:
+	 *                         `Fields\Icons\Icons`. Written without it, so
+	 *                         Strauss has no namespace to find in the string.
+	 *
+	 * @return string The class's full name, without a leading backslash.
+	 */
+	public static function sibling( string $under, int $depth, string $relative ): string {
+		$under = array_values( array_filter( explode( '\\', $under ), 'strlen' ) );
+
+		// Everything up to and including the segment SugarCommerce\ became.
+		$front = array_slice( $under, 0, max( 1, count( $under ) - $depth + 1 ) );
+
+		return implode( '\\', $front ) . '\\' . trim( $relative, '\\' );
+	}
 }
