@@ -34,7 +34,7 @@ final class Slurp {
 	 *
 	 * @var string[]
 	 */
-	public const SKIP = [ 'index.php' ];
+	public const array SKIP = [ 'index.php' ];
 
 	/**
 	 * Include every PHP file in a directory.

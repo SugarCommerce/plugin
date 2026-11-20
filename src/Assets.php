@@ -37,7 +37,7 @@ final class Assets {
 	 * A Composer package is never this deeply nested; the limit exists only so
 	 * a pathological path cannot walk to the filesystem root.
 	 */
-	private const MAX_DEPTH = 12;
+	private const int MAX_DEPTH = 12;
 
 	/**
 	 * The assets folder found for each calling file: path and url, or null.
